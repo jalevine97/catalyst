@@ -3,11 +3,10 @@ import { notFound } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { cache } from 'react';
 
-import { DynamicForm } from '@/vibes/soul/form/dynamic-form';
-import type { Field, FieldGroup } from '@/vibes/soul/form/dynamic-form/schema';
-import { Streamable } from '@/vibes/soul/lib/streamable';
+import { Breadcrumb } from '@/vibes/soul/primitives/breadcrumbs';
 import { ButtonLink } from '@/vibes/soul/primitives/button-link';
-import { Breadcrumb } from '@/vibes/soul/sections/breadcrumbs';
+import { DynamicForm } from '@/vibes/soul/primitives/dynamic-form';
+import type { Field, FieldGroup } from '@/vibes/soul/primitives/dynamic-form/schema';
 import {
   breadcrumbsTransformer,
   truncateBreadcrumbs,
@@ -180,8 +179,8 @@ export default async function ContactPage({ params, searchParams }: Props) {
   if (success === 'true') {
     return (
       <WebPageContent
-        breadcrumbs={Streamable.from(() => getWebPageBreadcrumbs(id))}
-        webPage={Streamable.from(() => getWebPageWithSuccessContent(id, t('success')))}
+        breadcrumbs={getWebPageBreadcrumbs(id)}
+        webPage={getWebPageWithSuccessContent(id, t('success'))}
       >
         <ButtonLink
           className="mt-8 @2xl:mt-12 @4xl:mt-16"
@@ -197,10 +196,7 @@ export default async function ContactPage({ params, searchParams }: Props) {
   }
 
   return (
-    <WebPageContent
-      breadcrumbs={Streamable.from(() => getWebPageBreadcrumbs(id))}
-      webPage={Streamable.from(() => getWebPage(id))}
-    >
+    <WebPageContent breadcrumbs={getWebPageBreadcrumbs(id)} webPage={getWebPage(id)}>
       <div className="mt-8 @2xl:mt-12 @4xl:mt-16">
         <DynamicForm
           action={submitContactForm}

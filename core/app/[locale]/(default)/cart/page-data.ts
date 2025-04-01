@@ -1,7 +1,6 @@
 import { getSessionCustomerAccessToken } from '~/auth';
 import { client } from '~/client';
-import { FragmentOf, graphql, VariablesOf } from '~/client/graphql';
-import { getShippingZones } from '~/client/management/get-shipping-zones';
+import { graphql, VariablesOf } from '~/client/graphql';
 import { TAGS } from '~/client/tags';
 
 export const PhysicalItemFragment = graphql(`
@@ -129,61 +128,6 @@ const MoneyFieldsFragment = graphql(`
   }
 `);
 
-const ShippingInfoFragment = graphql(`
-  fragment ShippingInfoFragment on Checkout {
-    entityId
-    shippingConsignments {
-      entityId
-      availableShippingOptions {
-        cost {
-          value
-        }
-        description
-        entityId
-        isRecommended
-      }
-      selectedShippingOption {
-        entityId
-        description
-        cost {
-          value
-        }
-      }
-      address {
-        city
-        countryCode
-        stateOrProvince
-        postalCode
-      }
-    }
-    handlingCostTotal {
-      value
-    }
-    shippingCostTotal {
-      currencyCode
-      value
-    }
-  }
-`);
-
-const GeographyFragment = graphql(
-  `
-    fragment GeographyFragment on Geography {
-      countries {
-        entityId
-        name
-        code
-        statesOrProvinces {
-          entityId
-          name
-          abbreviation
-        }
-      }
-    }
-  `,
-  [],
-);
-
 const CartPageQuery = graphql(
   `
     query CartPageQuery($cartId: String) {
@@ -192,8 +136,10 @@ const CartPageQuery = graphql(
           entityId
           version
           currencyCode
-          discountedAmount {
-            ...MoneyFieldsFragment
+          discounts {
+            discountedAmount {
+              ...MoneyFieldsFragment
+            }
           }
           lineItems {
             physicalItems {
@@ -221,25 +167,12 @@ const CartPageQuery = graphql(
           }
           coupons {
             code
-            discountedAmount {
-              ...MoneyFieldsFragment
-            }
           }
-          ...ShippingInfoFragment
         }
-      }
-      geography {
-        ...GeographyFragment
       }
     }
   `,
-  [
-    PhysicalItemFragment,
-    DigitalItemFragment,
-    MoneyFieldsFragment,
-    ShippingInfoFragment,
-    GeographyFragment,
-  ],
+  [PhysicalItemFragment, DigitalItemFragment, MoneyFieldsFragment],
 );
 
 type Variables = VariablesOf<typeof CartPageQuery>;
@@ -260,20 +193,4 @@ export const getCart = async (variables: Variables) => {
   });
 
   return data;
-};
-
-export const getShippingCountries = async (geography: FragmentOf<typeof GeographyFragment>) => {
-  const hasAccessToken = Boolean(process.env.BIGCOMMERCE_ACCESS_TOKEN);
-  const shippingZones = hasAccessToken ? await getShippingZones() : [];
-  const countries = geography.countries ?? [];
-
-  const uniqueCountryZones = new Set(
-    shippingZones.map((zone) => zone.locations.map((location) => location.country_iso2)).flat(),
-  );
-
-  return countries.filter((countryDetails) => {
-    const isCountryInTheList = uniqueCountryZones.has(countryDetails.code);
-
-    return isCountryInTheList || !hasAccessToken;
-  });
 };

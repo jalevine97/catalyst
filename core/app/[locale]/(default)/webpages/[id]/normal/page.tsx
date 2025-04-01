@@ -2,8 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { cache } from 'react';
 
-import { Streamable } from '@/vibes/soul/lib/streamable';
-import { Breadcrumb } from '@/vibes/soul/sections/breadcrumbs';
+import { Breadcrumb } from '@/vibes/soul/primitives/breadcrumbs';
 import {
   breadcrumbsTransformer,
   truncateBreadcrumbs,
@@ -68,10 +67,5 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function WebPage({ params }: Props) {
   const { id } = await params;
 
-  return (
-    <WebPageContent
-      breadcrumbs={Streamable.from(() => getWebPageBreadcrumbs(id))}
-      webPage={Streamable.from(() => getWebPage(id))}
-    />
-  );
+  return <WebPageContent breadcrumbs={getWebPageBreadcrumbs(id)} webPage={getWebPage(id)} />;
 }

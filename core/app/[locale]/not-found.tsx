@@ -1,9 +1,9 @@
 import { removeEdgesAndNodes } from '@bigcommerce/catalyst-client';
 import { getFormatter, getTranslations } from 'next-intl/server';
 
-import { FeaturedProductCarousel } from '@/vibes/soul/sections/featured-product-carousel';
+import { CarouselProduct } from '@/vibes/soul/primitives/products-carousel';
+import { FeaturedProductsCarousel } from '@/vibes/soul/sections/featured-products-carousel';
 import { NotFound as NotFoundSection } from '@/vibes/soul/sections/not-found';
-import { CarouselProduct } from '@/vibes/soul/sections/product-carousel';
 import { client } from '~/client';
 import { graphql } from '~/client/graphql';
 import { revalidate } from '~/client/revalidate-target';
@@ -53,10 +53,7 @@ export default async function NotFound() {
 
       <NotFoundSection subtitle={t('message')} title={t('heading')} />
 
-      <FeaturedProductCarousel
-        products={getFeaturedProducts()}
-        title={t('Carousel.featuredProducts')}
-      />
+      <FeaturedProductsCarousel products={getFeaturedProducts()} />
 
       <Footer />
     </>

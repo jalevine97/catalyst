@@ -41,7 +41,6 @@ export function ChangePasswordForm({
 
   useEffect(() => {
     if (lastResult?.error) {
-      // eslint-disable-next-line no-console
       console.log(lastResult.error);
     }
   }, [lastResult]);

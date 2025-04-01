@@ -57,7 +57,7 @@ export const orderDetailsTransformer = (
                 style: 'currency',
                 currency: lineItem.subTotalListPrice.currencyCode,
               }),
-              href: lineItem.baseCatalogProduct?.path ?? undefined,
+              href: lineItem.baseCatalogProduct?.path ?? `/product/${lineItem.productEntityId}`,
               image: lineItem.image
                 ? {
                     src: lineItem.image.url,

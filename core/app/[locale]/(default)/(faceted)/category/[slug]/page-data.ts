@@ -35,13 +35,6 @@ const CategoryPageQuery = graphql(
             }
           }
         }
-        settings {
-          storefront {
-            catalog {
-              productComparisonsEnabled
-            }
-          }
-        }
       }
     }
   `,

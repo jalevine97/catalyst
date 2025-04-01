@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 import { client } from '~/client';
 import { graphql } from '~/client/graphql';
-import { clearCartId, setCartId } from '~/lib/cart';
+import { clearCartId, getCartId, setCartId } from '~/lib/cart';
 import { serverToast } from '~/lib/server-toast';
 
 const LoginMutation = graphql(`
@@ -57,25 +57,17 @@ const LogoutMutation = graphql(`
 `);
 
 const PasswordCredentials = z.object({
+  type: z.literal('password'),
   email: z.string().email(),
   password: z.string().min(1),
-  cartId: z.string().optional(),
-});
-
-const AnonymousCredentials = z.object({
-  cartId: z.string().optional(),
 });
 
 const JwtCredentials = z.object({
+  type: z.literal('jwt'),
   jwt: z.string(),
-  cartId: z.string().optional(),
 });
 
-const SessionUpdate = z.object({
-  user: z.object({
-    cartId: z.string().nullable().optional(),
-  }),
-});
+export const Credentials = z.discriminatedUnion('type', [PasswordCredentials, JwtCredentials]);
 
 async function handleLoginCart(guestCartId?: string, loginResultCartId?: string) {
   const t = await getTranslations('Cart');
@@ -93,12 +85,14 @@ async function handleLoginCart(guestCartId?: string, loginResultCartId?: string)
   }
 }
 
-async function loginWithPassword(credentials: unknown): Promise<User | null> {
-  const { email, password, cartId } = PasswordCredentials.parse(credentials);
-
+async function loginWithPassword(
+  email: string,
+  password: string,
+  cartEntityId?: string,
+): Promise<User | null> {
   const response = await client.fetch({
     document: LoginMutation,
-    variables: { email, password, cartEntityId: cartId },
+    variables: { email, password, cartEntityId },
     fetchOptions: {
       cache: 'no-store',
     },
@@ -114,25 +108,22 @@ async function loginWithPassword(credentials: unknown): Promise<User | null> {
     return null;
   }
 
-  await handleLoginCart(cartId, result.cart?.entityId);
+  await handleLoginCart(cartEntityId, result.cart?.entityId);
 
   return {
     name: `${result.customer.firstName} ${result.customer.lastName}`,
     email: result.customer.email,
     customerAccessToken: result.customerAccessToken.value,
-    cartId: result.cart?.entityId,
   };
 }
 
-async function loginWithJwt(credentials: unknown): Promise<User | null> {
-  const { jwt, cartId } = JwtCredentials.parse(credentials);
-
+async function loginWithJwt(jwt: string, cartEntityId?: string): Promise<User | null> {
   const claims = decodeJwt(jwt);
   const channelId = claims.channel_id?.toString() ?? process.env.BIGCOMMERCE_CHANNEL_ID;
   const impersonatorId = claims.impersonator_id?.toString() ?? null;
   const response = await client.fetch({
     document: LoginWithTokenMutation,
-    variables: { jwt, cartEntityId: cartId },
+    variables: { jwt, cartEntityId },
     channelId,
     fetchOptions: {
       cache: 'no-store',
@@ -149,79 +140,69 @@ async function loginWithJwt(credentials: unknown): Promise<User | null> {
     return null;
   }
 
-  await handleLoginCart(cartId, result.cart?.entityId);
+  await handleLoginCart(cartEntityId, result.cart?.entityId);
 
   return {
     name: `${result.customer.firstName} ${result.customer.lastName}`,
     email: result.customer.email,
     customerAccessToken: result.customerAccessToken.value,
     impersonatorId,
-    cartId: result.cart?.entityId,
   };
 }
 
-function loginWithAnonymous(credentials: unknown): User | null {
-  const { cartId } = AnonymousCredentials.parse(credentials);
+async function authorize(credentials: unknown): Promise<User | null> {
+  const parsed = Credentials.parse(credentials);
+  const cartEntityId = await getCartId();
 
-  return {
-    cartId: cartId ?? null,
-  };
+  switch (parsed.type) {
+    case 'password': {
+      const { email, password } = parsed;
+
+      return loginWithPassword(email, password, cartEntityId);
+    }
+
+    case 'jwt': {
+      const { jwt } = parsed;
+
+      return loginWithJwt(jwt, cartEntityId);
+    }
+
+    default:
+      return null;
+  }
 }
+
+const partitionedCookie = (name?: string) =>
+  ({
+    ...(name !== undefined ? { name } : {}),
+    options: {
+      partitioned: true,
+      secure: true,
+      sameSite: 'none',
+    },
+  }) as const;
 
 const config = {
-  // Explicitly setting this value to be undefined. We want the library to handle CSRF checks when taking sensitive actions.
-  // When handling sensitive actions like sign in, sign out, etc., the library will automatically check for CSRF tokens.
-  // If you need to implement your own sensitive actions, you will need to implement CSRF checks yourself.
-  skipCSRFCheck: undefined,
-  // Set this environment variable if you want to trust the host when using `next build` & `next start`.
-  // Otherwise, this will be controlled by process.env.NODE_ENV within the library.
-  trustHost: process.env.AUTH_TRUST_HOST === 'true' ? true : undefined,
   session: {
     strategy: 'jwt',
   },
   pages: {
     signIn: '/login',
   },
+  trustHost: true,
   callbacks: {
-    jwt: ({ token, user, session, trigger }) => {
+    jwt: ({ token, user }) => {
       // user can actually be undefined
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       if (user?.customerAccessToken) {
-        token.user = {
-          ...token.user,
-          customerAccessToken: user.customerAccessToken,
-        };
-      }
-
-      // user can actually be undefined
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      if (user?.cartId) {
-        token.user = {
-          ...token.user,
-          cartId: user.cartId,
-        };
-      }
-
-      if (trigger === 'update') {
-        const parsedSession = SessionUpdate.safeParse(session);
-
-        if (parsedSession.success) {
-          token.user = {
-            ...token.user,
-            cartId: parsedSession.data.user.cartId,
-          };
-        }
+        token.customerAccessToken = user.customerAccessToken;
       }
 
       return token;
     },
     session({ session, token }) {
-      if (token.user?.customerAccessToken) {
-        session.user.customerAccessToken = token.user.customerAccessToken;
-      }
-
-      if (token.user?.cartId !== undefined) {
-        session.user.cartId = token.user.cartId;
+      if (token.customerAccessToken) {
+        session.customerAccessToken = token.customerAccessToken;
       }
 
       return session;
@@ -229,8 +210,7 @@ const config = {
   },
   events: {
     async signOut(message) {
-      const customerAccessToken =
-        'token' in message ? message.token?.user?.customerAccessToken : null;
+      const customerAccessToken = 'token' in message ? message.token?.customerAccessToken : null;
 
       if (customerAccessToken) {
         try {
@@ -253,59 +233,55 @@ const config = {
   },
   providers: [
     CredentialsProvider({
-      id: 'password',
       credentials: {
+        type: { type: 'text' },
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
-        cartId: { type: 'text' },
-      },
-      authorize: loginWithPassword,
-    }),
-    CredentialsProvider({
-      id: 'anonymous',
-      credentials: {
-        cartId: { type: 'text' },
-      },
-      authorize: loginWithAnonymous,
-    }),
-    CredentialsProvider({
-      id: 'jwt',
-      credentials: {
         jwt: { type: 'text' },
-        cartId: { type: 'text' },
       },
-      authorize: loginWithJwt,
+      authorize,
     }),
   ],
+  // configure NextAuth cookies to work inside of the Makeswift Builder's canvas
+  cookies: {
+    sessionToken: partitionedCookie(),
+    callbackUrl: partitionedCookie(),
+    csrfToken: partitionedCookie(),
+    pkceCodeVerifier: partitionedCookie(),
+    state: partitionedCookie(),
+    nonce: partitionedCookie(),
+    webauthnChallenge: partitionedCookie(),
+  },
 } satisfies NextAuthConfig;
 
-export const { handlers, auth, signIn, signOut, unstable_update: updateSession } = NextAuth(config);
+const { handlers, auth, signIn: nextAuthSignIn, signOut } = NextAuth(config);
 
-export const getSessionCustomerAccessToken = async () => {
+const signIn = (
+  credentials: z.infer<typeof Credentials>,
+  options: { redirect?: boolean | undefined; redirectTo?: string },
+) => nextAuthSignIn('credentials', { ...credentials, ...options });
+
+const getSessionCustomerAccessToken = async () => {
   try {
     const session = await auth();
 
-    return session?.user?.customerAccessToken;
+    return session?.customerAccessToken;
   } catch {
     // No empty
   }
 };
 
-export const isLoggedIn = async () => {
-  const cat = await getSessionCustomerAccessToken();
-
-  return Boolean(cat);
-};
+export { handlers, auth, signIn, signOut, getSessionCustomerAccessToken };
 
 declare module 'next-auth' {
   interface Session {
     user?: DefaultSession['user'];
+    customerAccessToken?: string;
   }
 
   interface User {
     name?: string | null;
     email?: string | null;
-    cartId?: string | null;
     customerAccessToken?: string;
     impersonatorId?: string | null;
   }
@@ -314,6 +290,6 @@ declare module 'next-auth' {
 declare module 'next-auth/jwt' {
   interface JWT {
     id?: string;
-    user?: DefaultSession['user'];
+    customerAccessToken?: string;
   }
 }

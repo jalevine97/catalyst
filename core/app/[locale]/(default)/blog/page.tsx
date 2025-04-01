@@ -4,7 +4,6 @@ import { getTranslations } from 'next-intl/server';
 import { SearchParams } from 'nuqs';
 import { createSearchParamsCache, parseAsInteger, parseAsString } from 'nuqs/server';
 
-import { Streamable } from '@/vibes/soul/lib/streamable';
 import { FeaturedBlogPostList } from '@/vibes/soul/sections/featured-blog-post-list';
 import { defaultPageInfo, pageInfoTransformer } from '~/data-transformers/page-info-transformer';
 
@@ -89,11 +88,11 @@ export default async function Blog(props: Props) {
         ...tagCrumb,
       ]}
       description={blog.description}
-      emptyStateSubtitle={Streamable.from(getEmptyStateSubtitle)}
-      emptyStateTitle={Streamable.from(getEmptyStateTitle)}
-      paginationInfo={Streamable.from(() => getPaginationInfo(props.searchParams))}
+      emptyStateSubtitle={getEmptyStateSubtitle()}
+      emptyStateTitle={getEmptyStateTitle()}
+      paginationInfo={getPaginationInfo(props.searchParams)}
       placeholderCount={6}
-      posts={Streamable.from(() => listBlogPosts(props.searchParams))}
+      posts={listBlogPosts(props.searchParams)}
       title={blog.name}
     />
   );

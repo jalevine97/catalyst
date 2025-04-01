@@ -1,4 +1,3 @@
-import PLazy from 'p-lazy';
 import { Suspense, use } from 'react';
 import { v4 as uuid } from 'uuid';
 
@@ -76,13 +75,8 @@ function all<T extends readonly unknown[] | []>(
   return result;
 }
 
-function from<T>(thunk: () => Promise<T>): Streamable<T> {
-  return PLazy.from(thunk);
-}
-
 export const Streamable = {
   all,
-  from,
 };
 
 export function useStreamable<T>(streamable: Streamable<T>): T {

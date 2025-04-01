@@ -9,7 +9,6 @@ import { decodeJwt } from 'jose';
 import { redirect, unstable_rethrow as rethrow } from 'next/navigation';
 
 import { signIn } from '~/auth';
-import { getCartId } from '~/lib/cart';
 
 interface TokenParams {
   params: Promise<{ token: string }>;
@@ -17,7 +16,6 @@ interface TokenParams {
 
 export async function GET(request: Request, { params }: TokenParams) {
   const token = (await params).token;
-  const cartId = await getCartId();
 
   try {
     // decode token without checking signature to get redirect path
@@ -29,7 +27,7 @@ export async function GET(request: Request, { params }: TokenParams) {
 
     // sign in with token which will check validity against BigCommerce API
     // and redirect to redirectTo
-    await signIn('jwt', { jwt: token, cartId, redirectTo });
+    await signIn({ type: 'jwt', jwt: token }, { redirectTo });
   } catch (error) {
     rethrow(error);
 
